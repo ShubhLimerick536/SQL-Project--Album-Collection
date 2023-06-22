@@ -1,0 +1,105 @@
+1. 
+create or replace view Exceptions AS
+select distinct `a`.`artist_name` AS `artist_name`,`al`.`album_name` AS `album_name` 
+from ((((`artists` `a` join `song_artist` `s_a` 
+on((`a`.`artist_id` = `s_a`.`artist_id`))) join `song_album` `s_al` 
+on((`s_a`.`song_id` = `s_al`.`song_id`))) join `albums` `al` 
+on((`s_al`.`album_id` = `al`.`album_id`))) join `album_artist` `a_a` 
+on((`al`.`album_id` = `a_a`.`album_id`))) 
+where (`a`.`artist_id` <> `a_a`.`artist_id`)
+
+==============================================================
+2.
+CREATE VIEW AlbumInfo as
+SELECT alb.album_name,(
+    SELECT GROUP_CONCAT(ar.artist_name)
+    FROM artists ar
+    JOIN album_artist alar ON ar.artist_id = alar.artist_id 
+    WHERE alb.album_id = alar.album_id
+	) 
+as list_of_artist ,alb.date_of_release,(
+	SELECT ROUND(SUM(s.song_length),2)
+	FROM songs s
+	JOIN song_album sal ON s.song_id = sal.song_id
+	WHERE sal.album_id = alb.album_id
+	)  
+total_length
+FROM albums alb
+=================================================================
+3.
+DELIMITER //
+CREATE OR REPLACE TRIGGER CheckReleasedate
+AFTER insert on song_album
+FOR EACH ROW BEGIN
+if (select date_of_release from songs s 
+where NEW.song_id=s.song_id)
+> 
+(select date_of_release from albums a
+where NEW.album_id=a.album_id) then 
+update songs s_d
+set s_d.date_of_release=(select date_of_release from albums a
+where NEW.album_id=a.album_id)
+where s_d.song_id=NEW.song_id;
+
+END IF;
+END; //
+
+4------------------------------------------------------------------------
+DELIMITER //
+CREATE  PROCEDURE AddTrack(IN A INT(10), IN S INT(10))
+BEGIN
+	
+	DECLARE AlbumE INT;
+	DECLARE SongE INT;
+	DECLARE E_track_no INT;
+	
+	
+	SELECT COUNT(*) INTO SongE
+	FROM songs s1
+	WHERE s1.song_id = S;
+	
+	SELECT COUNT(*) INTO AlbumE 
+	FROM albums alb1
+	WHERE alb1.album_id = A;
+	
+        
+
+	if(AlbumE  > 0 AND  SongE > 0 ) then
+    
+    select max(track_no)+1 into E_track_no
+	from song_album sal where sal.album_id =A; 
+    
+        If E_track_no = NULL THEN 
+        	SET E_track_no=0;
+		END if;
+        
+	INSERT INTO song_album(song_id, album_id, track_no)
+		value(S, A, E_track_no);
+	
+	END if;
+	
+END//
+DELIMITER ;
+
+5----------------------------------------------------------------------------
+DELIMITER //
+CREATE OR REPLACE FUNCTION GetTrackList(A INT(10)) RETURNS Varchar(50)
+BEGIN
+
+	DECLARE SongsList Varchar(50);
+
+	SELECT GROUP_CONCAT( s.song_name ORDER BY sal.track_no ) INTO SongsList
+	FROM songs s
+	JOIN song_album sal ON s.song_id = sal.song_id
+	WHERE sal.album_id = A;
+
+	RETURN SongsList;
+    END;
+//
+
+
+
+
+
+
+
